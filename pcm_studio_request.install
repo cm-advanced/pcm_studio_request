@@ -1,0 +1,82 @@
+<?php
+
+/**
+ * Implements hook_uninstall().
+ */
+function pcm_studio_request_uninstall() {
+  
+  // Remove all pcm_studio_request variables.
+  $variables = db_query("SELECT name FROM {variable} WHERE name LIKE 'pcm_studio_request_%'");
+  foreach ($variables as $variable) {
+    variable_del($variable->name);
+  }
+  
+  $eids = array();
+  $entities = db_query("SELECT studio_request_id FROM {pcm_studio_request}");
+  foreach ( $entities as $entity ) {
+    $eids[] = $entity->studio_request_id;
+  }
+  
+  // Delete all the studio requests at once
+  entity_delete_multiple($eids);
+  
+}
+
+/**
+ * Implements hook_install().
+ */
+function pcm_studio_request_install() {
+  
+  //not adding any fields on install... yet
+}
+
+
+/**
+ * Implements hook_schema().
+ */
+function pcm_studio_request_schema() {
+  $schema = array();
+
+  $schema['pcm_studio_request'] = array(
+    'description' => 'The base table for studio requests.',
+    'fields' => array(
+      'studio_request_id' => array(
+        'description' => 'The primary identifier for the studio request.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'type' => array(
+        'description' => 'The type (bundle) of this studio request.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'uid' => array(
+        'description' => 'ID of Drupal user creator.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when the studio request was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'changed' => array(
+        'description' => 'The Unix timestamp when the studio request was most recently saved.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'description' => array(
+        'description' => 'studio request description.',
+        'type' => 'text',
+      ),
+    ),
+    'primary key' => array('studio_request_id'),
+  );
+
+  return $schema;
+}

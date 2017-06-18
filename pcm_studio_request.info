@@ -1,0 +1,16 @@
+name = "Open Signal PCM Studio Request"
+description = "Defines an entity for studio requests."
+
+core = "7.x"
+package = Open Signal PCM Community Media Advanced
+version = 7.x-1.0
+project = "pcm_studio_request"
+project_status_url = https://github.com/cm-advanced/pcm_studio_request
+
+dependencies[] = "entity"
+
+files[] = "pcm_studio_request.controller.inc"
+files[] = "pcm_studio_request.inline_entity_form.inc"
+
+configure = admin/structure/pcm-studio_request/manage/fields
+

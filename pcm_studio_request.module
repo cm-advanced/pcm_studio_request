@@ -1,0 +1,389 @@
+<?php
+
+/**
+ * Implements hook_entity_info().
+ */
+function pcm_studio_request_entity_info() {
+  $return = array(
+    'studiorequest' => array(
+      'label' => t('Studio Request'),
+      'entity class' => 'StudioRequest',
+      'controller class' => 'StudioRequestController',
+      'inline entity form' => array('controller' => 'StudioRequestInlineEntityFormController'),
+      'base table' => 'pcm_studio_request',
+      'fieldable' => TRUE,
+      'entity keys' => array(
+        'id' => 'studio_request_id',
+	'bundle' => 'type',
+	'title' => '',
+      ),
+       // Attach bundles - i.e. alternative configurations of fields associated with a main entity.
+      'bundles' => array(
+      'studiorequest' => array(
+        'label' => 'Studio Request',
+        // Information below is used by the Field UI - they "attach" themselves here and lets us
+        // do the standard field management that all the core entities enjoy.
+        'admin' => array(
+          'path' => 'admin/structure/pcm-studio-request/manage',
+          'access arguments' => array('administer pcm_studio_request'),
+        ),
+      ),
+    ),
+      'load hook' => 'pcm_studio_request_load',
+      'view modes' => array(
+        'full' => array(
+          'label' => t('Default'),
+          'custom settings' => FALSE,
+        ),
+      ),
+      'label callback' => 'entity_class_label',
+      'uri callback' => 'entity_class_uri',
+      'module' => 'pcm_studio_request',
+      'access callback' => 'pcm_studio_request_access',
+    ),
+  );
+
+  return $return;
+}
+
+
+/**
+ * Implements hook_menu().
+ */
+function pcm_studio_request_menu() {
+  $items = array();
+
+  $items['studio-request/add'] = array(
+    'title' => 'Add Studio Request',
+    'page callback' => 'pcm_studio_request_add',
+    'access arguments' => array('administer pcm_studio_request'),
+  );
+
+  $studio_request_uri = 'studio-request/%pcm_studio_request';
+  $studio_request_uri_argument_position = 1;
+
+  $items[$studio_request_uri] = array(
+    'title callback' => 'entity_label',
+    'title arguments' => array('studiorequest', $studio_request_uri_argument_position),
+    'page callback' => 'pcm_studio_request_view',
+    'page arguments' => array($studio_request_uri_argument_position),
+    'access callback' => 'entity_access',
+    'access arguments' => array('view', 'studiorequest', $studio_request_uri_argument_position),
+    'file' => 'pcm_studio_request.pages.inc',
+  );
+
+  $items[$studio_request_uri . '/view'] = array(
+    'title' => 'View',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -10,
+  );
+
+  $items[$studio_request_uri . '/delete'] = array(
+    'title' => 'Delete studio request',
+    'title callback' => 'pcm_studio_request_label',
+    'title arguments' => array($studio_request_uri_argument_position),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('pcm_studio_request_delete_form', $studio_request_uri_argument_position),
+    'access callback' => 'entity_access',
+    'access arguments' => array('edit', 'studiorequest', $studio_request_uri_argument_position),
+  );
+
+  $items[$studio_request_uri . '/edit'] = array(
+    'title' => 'Edit',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('pcm_studio_request_form', $studio_request_uri_argument_position),
+    'access callback' => 'entity_access',
+    'access arguments' => array('edit', 'studiorequest', $studio_request_uri_argument_position),
+    'type' => MENU_LOCAL_TASK,
+    'context' => MENU_CONTEXT_PAGE | MENU_CONTEXT_INLINE,
+  );
+  
+  // This provides a place for Field API to hang its own
+  // interface and has to be the same as what was defined
+  // in studio request_entity_info() above.
+  $items['admin/structure/studio-request/manage'] = array(
+    'title' => 'Studio Requests',
+    'description' => 'Manage Studio Request Entity Structure',
+    'page callback' => 'pcm_studio_request_admin_page',
+    'access arguments' => array('administer pcm_studio_request'),
+    'weight' => -50,
+  );
+  
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function pcm_studio_request_permission() {
+  $permissions = array(
+    'administer pcm_studio_request' => array(
+      'title' => t('Administer Studio Requests Conflicts'),
+      'description' => t('Allows users to configure studio request fields.'),
+      'restrict access' => TRUE,
+    ),
+  );
+
+  return $permissions;
+}
+
+
+/**
+ * Implements hook_entity_property_info_alter().
+ */
+function pcm_studio_request_entity_property_info_alter(&$info) {
+  $properties = &$info['pcm_studio_request']['properties'];
+  $properties['created'] = array(
+    'label' => t("Date created"),
+    'type' => 'date',
+    'description' => t("The date the node was posted."),
+    'setter callback' => 'entity_property_verbatim_set',
+    'setter permission' => 'administer pcm_studio_request',
+    'schema field' => 'created',
+  );
+  $properties['changed'] = array(
+    'label' => t("Date changed"),
+    'type' => 'date',
+    'schema field' => 'changed',
+    'description' => t("The date the node was most recently updated."),
+  );
+  $properties['uid'] = array(
+    'label' => t("Author"),
+    'type' => 'user',
+    'description' => t("The author of the studio request conflict."),
+    'setter callback' => 'entity_property_verbatim_set',
+    'setter permission' => 'administer pcm_studio_request',
+    'required' => TRUE,
+    'schema field' => 'uid',
+  );
+}
+
+
+/*******************************************************************************
+ ********************************* Studio Request API's **********************************
+ ******************************************************************************/
+
+/**
+ * Access callback for studio request.
+ */
+function pcm_studio_request_access($op, $studiorequest, $account = NULL, $entity_type = NULL) {
+
+  global $user;
+
+  if (!isset($account)) {
+    $account = $user;
+  }
+  
+  switch ($op) {
+    case 'create':
+      return user_access('administer pcm_studio_request', $account);
+    case 'view':
+      return user_access('administer pcm_studio_request', $account);
+    case 'edit':
+      return user_access('administer pcm_studio_request', $account);
+  }
+}
+
+/**
+ * Load a studio request.
+ */
+function pcm_studio_request_load($studio_request_id, $reset = FALSE) {
+  $studiorequests = pcm_studio_request_load_multiple(array($studio_request_id), array(), $reset);
+  return reset($studiorequests);
+}
+
+/**
+ * Load multiple studio requests based on certain conditions.
+ */
+function pcm_studio_request_load_multiple($studio_request_ids = array(), $conditions = array(), $reset = FALSE) {
+  return entity_load('studiorequest', $studio_request_ids, $conditions, $reset);
+}
+
+/**
+ * Save studio request.
+ */
+function pcm_studio_request_save($studiorequest) {
+  entity_save('studiorequest', $studiorequest);
+}
+
+/**
+ * Delete single studio request.
+ */
+function pcm_studio_request_delete($studiorequest) {
+  entity_delete('studiorequest', entity_id('studiorequest' ,$studiorequest));
+}
+
+/**
+ * Delete multiple studio requests.
+ */
+function pcm_studio_request_delete_multiple($studio_request_ids) {
+  entity_delete_multiple('studiorequest', $studio_request_ids);
+}
+
+
+/**
+ * Studio Request Form.
+ */
+function pcm_studio_request_form($form, &$form_state, $studiorequest) {
+
+  $form_state['studiorequest'] = $studiorequest;
+
+  $form['uid'] = array(
+    '#type' => 'value',
+    '#value' => $studiorequest->uid,
+  );
+
+  field_attach_form('studiorequest', $studiorequest, $form, $form_state);
+
+  $submit = array();
+  if (!empty($form['#submit'])) {
+    $submit += $form['#submit'];
+  }
+
+  $form['actions'] = array(
+    '#weight' => 100,
+  );
+
+  $form['actions']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save Studio Request'),
+    '#submit' => $submit + array('pcm_studio_request_form_submit'),
+  );
+
+  // Show Delete button if we edit studio request.
+  $studio_request_id = entity_id('studiorequest' ,$studiorequest);
+  if (!empty($studio_request_id) && pcm_studio_request_access('edit', $studiorequest)) {
+    $form['actions']['delete'] = array(
+      '#type' => 'submit',
+      '#value' => t('Delete'),
+      '#submit' => array('pcm_studio_request_form_submit_delete'),
+    );
+  }
+
+  $form['#validate'][] = 'pcm_studio_request_form_validate';
+
+  return $form;
+}
+
+function pcm_studio_request_form_validate($form, &$form_state) {
+  // ADD ANY VALIDATION HERE
+}
+
+/**
+ * Studio Request submit handler.
+ */
+function pcm_studio_request_form_submit($form, &$form_state) {
+
+  $studiorequest = $form_state['studiorequest'];
+
+  entity_form_submit_build_entity('studiorequest', $studiorequest, $form, $form_state);
+
+  pcm_studio_request_save($studiorequest);
+
+  $studio_request_uri = entity_uri('studiorequest', $studiorequest);
+
+  $form_state['redirect'] = $studio_request_uri['path'];
+
+  drupal_set_message(t('Studio Request %title saved.', array('%title' => entity_label('studiorequest', $studiorequest))));
+}
+
+function pcm_studio_request_form_submit_delete($form, &$form_state) {
+  $studiorequest = $form_state['studiorequest'];
+  $studio_request_uri = entity_uri('studiorequest', $studiorequest);
+  $form_state['redirect'] = $studio_request_uri['path'] . '/delete';
+}
+
+/**
+ * Delete confirmation form.
+ */
+function pcm_studio_request_delete_form($form, &$form_state, $studiorequest) {
+  $form_state['studiorequest'] = $studiorequest;
+  // Always provide entity id in the same form key as in the entity edit form.
+  //$form['studio request_type_id'] = array('#type' => 'value', '#value' => entity_id('pcm_studio_request' ,$studio request));
+  $studio_request_uri = entity_uri('studiorequest', $studiorequest);
+  return confirm_form($form,
+    t('Are you sure you want to delete studio request conflict %title?', array('%title' => entity_label('studiorequest', $studiorequest))),
+    $studio_request_uri['path'],
+    t('This action cannot be undone.'),
+    t('Delete'),
+    t('Cancel')
+  );
+}
+
+/**
+ * Delete form submit handler.
+ */
+function pcm_studio_request_delete_form_submit($form, &$form_state) {
+  $studiorequest = $form_state['studiorequest'];
+  pcm_studio_request_delete($studiorequest);
+
+  drupal_set_message(t('Studio Request %title deleted.', array('%title' => entity_label('pcm_studio_request', $studiorequest))));
+
+  $form_state['redirect'] = '<front>';
+}
+
+
+/**
+ * Just provide some studio request info for the entity administration page.
+ * This can be expanded to add more information / a list of all created entites, etc.
+ */
+function pcm_studio_request_admin_page() {  
+  drupal_goto('admin/structure/pcm-studio-request/manage/fields');
+}
+
+/**
+ * Creates an studio request entity for us - simply intializing the main variables and
+ * sending us to a form to add in the rest.
+ */
+function pcm_studio_request_add() {
+  $studiorequest = entity_create('studiorequest', array('type' => 'studiorequest'));
+  return drupal_get_form('pcm_studio_request_form', $studiorequest);
+}
+
+/**
+ * Implementing the uri callback defined
+ */
+function pcm_studio_request_uri($studiorequest) {
+
+  return array(
+    'path' => 'studio-request/' . $studiorequest->studio_request_id,
+  );
+}
+
+
+/**
+ *
+ * Implementation of hook_entity_presave()
+ *
+ * Run through a ruleset to set the studio request endtime based on several criteria
+ */
+
+function pcm_studio_request_entity_presave($studiorequest, $type) {
+
+  if ('studiorequest' != $type) {
+    return;
+  }
+    
+}
+
+/**
+ *  Implementation of hook_entity_view()
+ */
+function pcm_studio_request_entity_view($studiorequest, $type, $view_mode, $langcode) {
+  if ('studiorequest' != $type) {
+    return;
+  }
+  unset($studiorequest->studio_request_id);
+  
+}
+
+function pcm_studio_request_form_alter(&$form, &$form_state, $form_id) {
+  if (isset($form['#node_edit_form']) &&$form['#node_edit_form'] && 
+      $form['type']['#value'] == 'project_renewal_season_') {
+    unset($form['field_studio_request']);
+    $form['field_studio_request_inline1']['#prefix'] = "<table><tr><td>";
+    $form['field_studio_request_inline1']['#suffix'] = "</td>";
+    $form['field_studio_request_inline2']['#prefix'] = "<td>";
+    $form['field_studio_request_inline2']['#suffix'] = "</td></tr></table>";
+  }
+}
